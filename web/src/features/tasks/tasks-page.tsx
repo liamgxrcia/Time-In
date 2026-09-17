@@ -1,0 +1,22 @@
+"use client";
+import { useState } from "react";
+import Link from "next/link";
+import { useDashboard } from "@/hooks/use-dashboard";
+import { DataBoundary } from "@/components/data-boundary";
+import { PageHeader } from "@/components/page-header";
+import { WorkflowForm, Field, inputClass, value } from "@/components/workflow-form";
+import { formatDate, relativeDate } from "@/lib/utils";
+export function TasksPage() {
+  const query = useDashboard(); const [filter, setFilter] = useState("open");
+  const people = query.data?.people.filter(p => !["closed","not-interested"].includes(p.stage)) ?? [];
+  return <DataBoundary {...query} onRetry={() => query.refetch()} isEmpty={false} empty={null}>{query.data && <>
+    <PageHeader eyebrow="Tasks and commitments" title="Promises kept visible." description="Save tasks, record completion evidence, and keep task state separate from lifecycle." />
+    <details className="surface mb-6 p-5"><summary className="cursor-pointer font-semibold">Create task</summary><WorkflowForm className="mt-4" label="Save task" build={data => ({ type: "task.create", personId: value(data,"personId"), title: value(data,"title"), dueAt: new Date(value(data,"dueAt")).toISOString(), priority: value(data,"priority") as "low" | "normal" | "high", ...(value(data,"recurrence") ? { recurrence: { unit: value(data,"recurrence") as "day" | "week" | "month", interval: Number(value(data,"interval")) } } : {}) })}>
+      <div className="grid gap-4 sm:grid-cols-2"><Field label="Person"><select name="personId" required className={inputClass}><option value="">Choose person</option>{people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field><Field label="Task title"><input name="title" required maxLength={200} className={inputClass} /></Field><Field label="Due date"><input type="datetime-local" name="dueAt" required className={inputClass} /></Field><Field label="Priority"><select name="priority" defaultValue="normal" className={inputClass}>{["low","normal","high"].map(p => <option key={p}>{p}</option>)}</select></Field><Field label="Repeat"><select name="recurrence" className={inputClass}><option value="">One time</option>{["day","week","month"].map(u => <option key={u}>{u}</option>)}</select></Field><Field label="Repeat interval"><input name="interval" type="number" min={1} max={365} defaultValue={1} className={inputClass} /></Field></div>
+    </WorkflowForm></details>
+    <label className="mb-4 block text-sm font-semibold">Task status<select value={filter} onChange={e => setFilter(e.target.value)} className={inputClass}>{["open","completed","cancelled"].map(s => <option key={s}>{s}</option>)}</select></label>
+    <ul className="space-y-4">{query.data.tasks.filter(t => t.status === filter).map(task => <li className="surface p-5" key={task.id}><div className="flex flex-wrap justify-between gap-3"><div><h2 className="font-semibold">{task.title}</h2><Link className="text-sm underline" href={`/people/${task.personId}`}>{query.data.people.find(p => p.id === task.personId)?.name ?? "Archived relationship"}</Link><p className="mt-2 text-xs text-muted">{formatDate(task.dueAt,true)} · {relativeDate(task.dueAt)}{task.recurrence && ` · Every ${task.recurrence}`}</p></div><span className="text-sm">{task.status}</span></div>{task.evidence && <p className="mt-3 text-sm">Evidence: {task.evidence}</p>}
+      {task.status === "open" && <div className="mt-4 grid gap-4 lg:grid-cols-3"><WorkflowForm label="Complete task" build={data => ({ type: "task.complete", id: task.id, expectedRevision: task.revision ?? 0, evidence: value(data,"evidence") })}><Field label={`Completion evidence for ${task.title}`}><textarea required name="evidence" className={inputClass} /></Field></WorkflowForm><WorkflowForm label="Snooze task" build={data => ({ type: "task.snooze", id: task.id, expectedRevision: task.revision ?? 0, dueAt: new Date(value(data,"dueAt")).toISOString() })}><Field label={`New due date for ${task.title}`}><input type="datetime-local" required name="dueAt" className={inputClass} /></Field></WorkflowForm><WorkflowForm label="Cancel task" build={data => ({ type: "task.cancel", id: task.id, expectedRevision: task.revision ?? 0, reason: value(data,"reason") })}><Field label={`Cancellation reason for ${task.title}`}><input required name="reason" className={inputClass} /></Field></WorkflowForm></div>}
+    </li>)}</ul>{!query.data.tasks.some(t => t.status === filter) && <p className="surface p-6 text-muted">No {filter} tasks.</p>}
+  </>}</DataBoundary>;
+}

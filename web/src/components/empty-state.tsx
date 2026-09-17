@@ -1,0 +1,2 @@
+import { Sparkles } from "lucide-react";
+export function EmptyState({ title, message, action }: { title: string; message: string; action?: React.ReactNode }) { return <div className="surface flex min-h-[360px] flex-col items-center justify-center p-10 text-center"><Sparkles className="mb-5 size-8 text-gold-strong" aria-hidden /><h2 className="display text-3xl">{title}</h2><p className="mt-3 max-w-md text-sm leading-6 text-muted">{message}</p>{action && <div className="mt-6">{action}</div>}</div>; }
