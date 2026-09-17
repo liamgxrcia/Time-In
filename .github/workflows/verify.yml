@@ -1,0 +1,70 @@
+name: Verify web CRM
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: local-test-only
+          POSTGRES_DB: timein_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:local-test-only@127.0.0.1:5432/timein_test
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Apply fresh database migrations
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f ../tests/database/bootstrap.sql
+          for migration in ../supabase/migrations/*.sql; do
+            psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+      - run: node scripts/generate-database-types.mjs
+      - run: git diff --exit-code -- src/contracts/database.types.ts
+      - run: npx vitest run --config vitest.backend.config.mts
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+        env:
+          TEST_DATABASE_URL: ""
+      - run: npm run build
+
+  browser:
+    name: Browser smoke
+    runs-on: ubuntu-latest
+    needs: verify
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit firefox
+      - run: npm run test:e2e
